@@ -1,0 +1,34 @@
+# joint_inversion : [1,-1,1,-1,1,-1]
+
+#stores settings associated with the puppet master arm
+encoder_profile : {
+  analog : {
+    joint_inversion: [-1,-1, 1,-1,-1,-1],
+     other: true
+     },
+  digital : {
+    joint_inversion: [1, 1,-1, 1, 1, 1],
+    other: false
+    }
+    }
+
+#entered in degrees to make editing easier
+joint_lims : {
+  lower_lims : [0.0, -120.0, 0.0, -180.0, -180.0, 90.0],
+  upper_lims : [180.0, 0.0, 175.0, 0.0, 0.0, 270.0],
+  conservative_lower_lims : [45.0, -100.0, 45.0, -135.0, -135.0, 135.0],
+  conservative_upper_lims : [135, -45.0, 140.0, -45.0, -45.0, 225.0],
+}
+
+#radians
+max_joint_speeds : [3.0, 3.0, 3.0, 3.0, 3.0, 3.0]
+
+#maximum allowable discontinuity between eoncoder position readings
+position_jump_error : 0.1
+
+#configures the z-axis lower limmit in cm relative to the robot base
+z_axis_lim_config : {
+  floor : -0.37,
+  table : 0.0,
+  test : 0.0
+  }

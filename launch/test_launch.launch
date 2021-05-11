@@ -1,0 +1,13 @@
+<launch>
+  <arg name="encoder_type" default="analog"/>
+  <arg name="floor_type" default="floor"/>
+  <!-- <ard /> -->
+  <!-- setings files -->
+  <param name="encoder_type" type="str" value="$(arg encoder_type)"/>
+  <param name="floor_type" type="str" value="$(arg floor_type)"/>
+
+  <rosparam command="load" file="$(find test_vel_controller)/Settings/tele_op_settings.yaml" />
+  <rosparam command="load" file="$(find test_vel_controller)/Settings/gripper_collision_points.yaml" />
+  <!-- tele op node -->
+  <node name="test_name" pkg="test_vel_controller" type="test_reading_settings.py" output = "screen"/>
+</launch>
