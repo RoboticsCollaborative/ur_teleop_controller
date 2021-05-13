@@ -1,14 +1,20 @@
 # joint_inversion : [1,-1,1,-1,1,-1]
 
 #stores settings associated with the puppet master arm
-encoder_profile : {
+encoder_profiles : {
   analog : {
     joint_inversion: [-1,-1, 1,-1,-1,-1],
-     other: true
-     },
+    gains : { #velocity control loop gains
+      joint_p_gains : [5.0, 5.0, 5.0, 10.0, 10.0, 10.0],
+      joint_ff_gains : [0.0, 0.0, 0.0, 1.0, 1.1, 1.1]
+      }
+    },
   digital : {
     joint_inversion: [1, 1,-1, 1, 1, 1],
-    other: false
+    gains : { #velocity control loop gains
+      joint_p_gains : [5.0, 5.0, 5.0, 10.0, 10.0, 10.0],
+      joint_ff_gains : [0.0, 0.0, 0.0, 1.0, 1.1, 1.1]
+      }
     }
     }
 
@@ -30,5 +36,9 @@ position_jump_error : 0.1
 z_axis_lim_config : {
   floor : -0.37,
   table : 0.0,
-  test : 0.0
+  test : 0.0,
+  none : 0.0 #used to disable collitsion checking
   }
+
+#robot default setpoint
+default_pos : [90.0, -90.0, 90.0, -90.0, -90, 180.0]

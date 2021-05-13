@@ -17,24 +17,15 @@ from std_msgs.msg import Bool
 
 # from controller_manager_msgs.srv import ListControllers
 # from controller_manager_msgs.srv import SwitchController
-
-joint_vel_lim = 1.0
+#TODO this is unused except in initialization. Change this behavior
 control_arm_saved_zero = np.array([0.51031649, 1.22624958, 3.31996918, 0.93126088, 3.1199832, 9.78404331])
 
-#define initial state
-
-#joint inversion - accounts for encoder axes being inverted inconsistently
-joint_inversion = np.array([-1,-1,1,-1,-1,-1]) # analog encoder dummy arm
-#joint_inversion = np.array([1,1,-1,1,1,1]) # digital encoder dummy arm
 two_pi = np.pi*2
-# # TODO Arm class
-    #Breaking at shutdown
-    #Follow traj
-#test_point = np.array([0.04,0.0,-0.21,1]).reshape(-1,1)
-# test_point = np.array([0.0,0.2,0.0,1]).reshape(-1,1)
-gripper_collision_points =  np.array([[0.04, 0.0, -0.21, 1.0], #fingertip
-                                      [0.05, 0.04, 0.09,  1.0],  #hydraulic outputs
-                                      [0.05, -0.04, 0.09,  1.0]]).T
+
+
+# gripper_collision_points =  np.array([[0.04, 0.0, -0.21, 1.0], #fingertip
+#                                       [0.05, 0.04, 0.09,  1.0],  #hydraulic outputs
+#                                       [0.05, -0.04, 0.09,  1.0]]).T
 class ur5e_arm():
     '''Defines velocity based controller for ur5e arm for use in teleop project
     '''
@@ -44,25 +35,53 @@ class ur5e_arm():
     joint_reorder = [2,1,0,3,4,5]
     breaking_stop_time = 0.1 #when stoping safely, executes the stop in 0.1s Do not make large!
 
+    #read in settings
+    encoder_type = rospy.get_param("/encoder_type")
+    floor_type = rospy.get_param("/floor_type")
+    floor_height = rospy.get_param("/floor_height") if rospy.has_param('/floor_hight') else None
+    encoder_profiles = rospy.get_param("/encoder_profiles")
+    joint_lims = rospy.get_param("/joint_lims")
+    gripper_collision_points = np.array(rospy.get_param("/gripper_collision_points"))
+    assert(gripper_collision_points.shape[1] == 3)
+    #reshape for multiplication with 4x4 pose matrix
+    gripper_collision_points = np.vstack(gripper_collision_points.T, np.ones(1,gripper_collision_points.shape(0)))
+    # max_joint_speeds = np.array([3.0, 3.0, 3.0, 3.0, 3.0, 3.0])
+    max_joint_speeds = rospy.get_param("/max_joint_speeds")
+    z_axis_lim_config = rospy.get_param("/z_axis_lim_config")
+    #check user entered settings
+    assert(floor_type in z_axis_lim_config.keys())
+    assert(encoder_type in encoder_profiles.keys())
+
+    #joint inversion - accounts for encoder axes being inverted inconsistently
+    joint_inversion = encoder_profiles[encoder_type]['joint_inversion']
+
     #throws an error and stops the arm if there is a position discontinuity in the
     #encoder input freater than the specified threshold
     #with the current settings of 100hz sampling, 0.1 radiands corresponds to
     #~10 rps velocity, which is unlikely to happen unless the encoder input is wrong
-    position_jump_error = 0.1
-    # ains = np.array([10.0]*6) #works up to at least 20 on wrist 3
-    joint_p_gains_varaible = np.array([5.0, 5.0, 5.0, 10.0, 10.0, 10.0]) #works up to at least 20 on wrist 3
-    joint_ff_gains_varaible = np.array([0.0, 0.0, 0.0, 1.0, 1.1, 1.1])
+    # position_jump_error = 0.1
+    position_jump_error = rospy.get_param("/position_jump_error")
 
-    default_pos = (np.pi/180)*np.array([90.0, -90.0, 90.0, -90.0, -90, 180.0])
+    #read in gains
+    joint_p_gains = np.array(encoder_profiles[encoder_type]['joint_p_gains']) #works up to at least 20 on wrist 3
+    joint_ff_gains = np.array(encoder_profiles[encoder_type]['joint_ff_gains'])
+    # joint_p_gains = np.array([5.0, 5.0, 5.0, 10.0, 10.0, 10.0]) #works up to at least 20 on wrist 3
+    # joint_ff_gains = np.array([0.0, 0.0, 0.0, 1.0, 1.1, 1.1])
+
+
+    default_pos = (np.pi/180)*np.array(rospy.get_param("/default_pos"))
     robot_ref_pos = deepcopy(default_pos)
     saved_ref_pos = None
 
-    lower_lims = (np.pi/180)*np.array([0.0, -120.0, 0.0, -180.0, -180.0, 90.0])
-    upper_lims = (np.pi/180)*np.array([180.0, 0.0, 175.0, 0.0, 0.0, 270.0])
-    conservative_lower_lims = (np.pi/180)*np.array([45.0, -100.0, 45.0, -135.0, -135.0, 135.0])
-    conservative_upper_lims = (np.pi/180)*np.array([135, -45.0, 140.0, -45.0, -45.0, 225.0])
-    max_joint_speeds = np.array([3.0, 3.0, 3.0, 3.0, 3.0, 3.0])
-    # max_joint_speeds = np.array([3.0, 3.0, 3.0, 3.0, 3.0, 3.0])*0.1
+    # lower_lims = (np.pi/180)*np.array([0.0, -120.0, 0.0, -180.0, -180.0, 90.0])
+    # upper_lims = (np.pi/180)*np.array([180.0, 0.0, 175.0, 0.0, 0.0, 270.0])
+    # conservative_lower_lims = (np.pi/180)*np.array([45.0, -100.0, 45.0, -135.0, -135.0, 135.0])
+    # conservative_upper_lims = (np.pi/180)*np.array([135, -45.0, 140.0, -45.0, -45.0, 225.0])
+    lower_lims = (np.pi/180)*np.array(joint_lims['lower_lims'])
+    upper_lims = (np.pi/180)*np.array(joint_lims['upper_lims'])
+    conservative_lower_lims = (np.pi/180)*np.array(joint_lims['conservative_lower_lims'])
+    conservative_upper_lims = (np.pi/180)*np.array(joint_lims['conservative_upper_lims'])
+
     #default control arm setpoint - should be calibrated to be 1 to 1 with default_pos
     #the robot can use relative joint control, but this saved defailt state can
     #be used to return to a 1 to 1, absolute style control
@@ -157,7 +176,7 @@ class ur5e_arm():
         previous_positions = deepcopy(self.current_daq_positions)
         self.current_daq_positions[:] = [data.encoder1.pos, data.encoder2.pos, data.encoder3.pos, data.encoder4.pos, data.encoder5.pos, data.encoder6.pos]
         self.current_daq_velocities[:] = [data.encoder1.vel, data.encoder2.vel, data.encoder3.vel, data.encoder4.vel, data.encoder5.vel, data.encoder6.vel]
-        self.current_daq_velocities *= joint_inversion #account for diferent conventions
+        self.current_daq_velocities *= self.joint_inversion #account for diferent conventions
 
         if not self.first_daq_callback and np.any(np.abs(self.current_daq_positions - previous_positions) > self.position_jump_error):
             print('stopping arm - encoder error!')
@@ -167,7 +186,7 @@ class ur5e_arm():
             self.shutdown_safe()
         # np.subtract(,,out=) #update relative position
         self.current_daq_rel_positions = self.current_daq_positions - self.control_arm_ref_config
-        self.current_daq_rel_positions *= joint_inversion
+        self.current_daq_rel_positions *= self.joint_inversion
         self.current_daq_rel_positions_waraped = np.mod(self.current_daq_rel_positions+np.pi,two_pi)-np.pi
         self.first_daq_callback = False
 
@@ -462,9 +481,9 @@ class ur5e_arm():
                     break
 
             position_error = pos_ref - self.current_joint_positions
-            vel_ref_temp = self.joint_p_gains_varaible*position_error
+            vel_ref_temp = self.joint_p_gains*position_error
             #enforce max velocity setting
-            np.clip(vel_ref_temp,-joint_vel_lim,joint_vel_lim,vel_ref_temp)
+            np.clip(vel_ref_temp,-self.max_joint_speeds,self.max_joint_speeds,vel_ref_temp)
             self.vel_ref.data = vel_ref_temp
             self.vel_pub.publish(self.vel_ref)
             # print(pos_ref)
@@ -481,7 +500,7 @@ class ur5e_arm():
         defined gripper points. Returns the neares position with the same orientation
         that is not violating the floor constraint.'''
         pose = forward(reference_positon)
-        collision_positions = np.dot(pose, gripper_collision_points)
+        collision_positions = np.dot(pose, self.gripper_collision_points)
 
         min_point = np.argmin(collision_positions[2,:])
         collision = collision_positions[2,min_point] < self.z_axis_lim
@@ -548,8 +567,8 @@ class ur5e_arm():
 
 
             #calculate vel signal
-            np.multiply(position_error,self.joint_p_gains_varaible,out=vel_ref_array)
-            vel_ref_array += self.joint_ff_gains_varaible*self.current_daq_velocities
+            np.multiply(position_error,self.joint_p_gains,out=vel_ref_array)
+            vel_ref_array += self.joint_ff_gains*self.current_daq_velocities
             #enforce max velocity setting
             np.clip(vel_ref_array,-self.max_joint_speeds,self.max_joint_speeds,vel_ref_array)
 
