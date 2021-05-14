@@ -15,13 +15,10 @@ from ur_dashboard_msgs.msg import SafetyMode
 from ur_dashboard_msgs.srv import IsProgramRunning, GetSafetyMode
 from std_msgs.msg import Bool
 
-# from controller_manager_msgs.srv import ListControllers
-# from controller_manager_msgs.srv import SwitchController
 #TODO this is unused except in initialization. Change this behavior
 control_arm_saved_zero = np.array([0.51031649, 1.22624958, 3.31996918, 0.93126088, 3.1199832, 9.78404331])
 
 two_pi = np.pi*2
-
 
 # gripper_collision_points =  np.array([[0.04, 0.0, -0.21, 1.0], #fingertip
 #                                       [0.05, 0.04, 0.09,  1.0],  #hydraulic outputs
@@ -41,16 +38,30 @@ class ur5e_arm():
     floor_height = rospy.get_param("/floor_height") if rospy.has_param('/floor_hight') else None
     encoder_profiles = rospy.get_param("/encoder_profiles")
     joint_lims = rospy.get_param("/joint_lims")
+    conservative_joint_lims_enabled = rospy.get_param("/conservative_joint_lims")
     gripper_collision_points = np.array(rospy.get_param("/gripper_collision_points"))
     assert(gripper_collision_points.shape[1] == 3)
     #reshape for multiplication with 4x4 pose matrix
-    gripper_collision_points = np.vstack(gripper_collision_points.T, np.ones(1,gripper_collision_points.shape(0)))
+    gripper_collision_points = np.vstack((gripper_collision_points.T, np.ones((1,gripper_collision_points.shape[0]))))
     # max_joint_speeds = np.array([3.0, 3.0, 3.0, 3.0, 3.0, 3.0])
-    max_joint_speeds = rospy.get_param("/max_joint_speeds")
+    max_joint_speeds = np.array(rospy.get_param("/max_joint_speeds"))
     z_axis_lim_config = rospy.get_param("/z_axis_lim_config")
     #check user entered settings
     assert(floor_type in z_axis_lim_config.keys())
     assert(encoder_type in encoder_profiles.keys())
+
+    #set the floor height variable
+    #keepout (limmited to z axis height for now)
+    # self.keepout_enabled = True
+    # self.z_axis_lim = -0.37 # floor 0.095 #short table # #0.0 #table
+    if not floor_height is None:
+        assert(type(floor_height) is float)
+        keepout_enabled = True
+        z_axis_lim = floor_height
+    else:
+        keepout_enabled = False if floor_type == 'none' else True
+        z_axis_lim = z_axis_lim_config[floor_type]
+
 
     #joint inversion - accounts for encoder axes being inverted inconsistently
     joint_inversion = encoder_profiles[encoder_type]['joint_inversion']
@@ -63,8 +74,8 @@ class ur5e_arm():
     position_jump_error = rospy.get_param("/position_jump_error")
 
     #read in gains
-    joint_p_gains = np.array(encoder_profiles[encoder_type]['joint_p_gains']) #works up to at least 20 on wrist 3
-    joint_ff_gains = np.array(encoder_profiles[encoder_type]['joint_ff_gains'])
+    joint_p_gains = np.array(encoder_profiles[encoder_type]['gains']['joint_p_gains']) #works up to at least 20 on wrist 3
+    joint_ff_gains = np.array(encoder_profiles[encoder_type]['gains']['joint_ff_gains'])
     # joint_p_gains = np.array([5.0, 5.0, 5.0, 10.0, 10.0, 10.0]) #works up to at least 20 on wrist 3
     # joint_ff_gains = np.array([0.0, 0.0, 0.0, 1.0, 1.1, 1.1])
 
@@ -77,10 +88,12 @@ class ur5e_arm():
     # upper_lims = (np.pi/180)*np.array([180.0, 0.0, 175.0, 0.0, 0.0, 270.0])
     # conservative_lower_lims = (np.pi/180)*np.array([45.0, -100.0, 45.0, -135.0, -135.0, 135.0])
     # conservative_upper_lims = (np.pi/180)*np.array([135, -45.0, 140.0, -45.0, -45.0, 225.0])
-    lower_lims = (np.pi/180)*np.array(joint_lims['lower_lims'])
-    upper_lims = (np.pi/180)*np.array(joint_lims['upper_lims'])
-    conservative_lower_lims = (np.pi/180)*np.array(joint_lims['conservative_lower_lims'])
-    conservative_upper_lims = (np.pi/180)*np.array(joint_lims['conservative_upper_lims'])
+    if not conservative_joint_lims_enabled:
+        lower_lims = (np.pi/180)*np.array(joint_lims['lower_lims'])
+        upper_lims = (np.pi/180)*np.array(joint_lims['upper_lims'])
+    else:
+        lower_lims = (np.pi/180)*np.array(joint_lims['conservative_lower_lims'])
+        upper_lims = (np.pi/180)*np.array(joint_lims['conservative_upper_lims'])
 
     #default control arm setpoint - should be calibrated to be 1 to 1 with default_pos
     #the robot can use relative joint control, but this saved defailt state can
@@ -100,25 +113,17 @@ class ur5e_arm():
 
     first_daq_callback = True
 
-    def __init__(self, test_control_signal = False, conservative_joint_lims = True):
+    def __init__(self):
         '''set up controller class variables & parameters'''
-
-        if conservative_joint_lims:
-            self.lower_lims = self.conservative_lower_lims
-            self.upper_lims = self.conservative_upper_lims
-
-        #keepout (limmited to z axis height for now)
-        self.keepout_enabled = True
-        self.z_axis_lim = -0.37 # floor 0.095 #short table # #0.0 #table
 
         #launch nodes
         rospy.init_node('teleop_controller', anonymous=True)
         #start subscribers
-        if test_control_signal:
-            print('Running in test mode ... no daq input')
-            self.test_control_signal = test_control_signal
-        else:
-            rospy.Subscriber("daqdata_filtered", jointdata, self.daq_callback)
+        # if test_control_signal:
+        #     print('Running in test mode ... no daq input')
+        #     self.test_control_signal = test_control_signal
+        # else:
+        rospy.Subscriber("daqdata_filtered", jointdata, self.daq_callback)
 
         #start robot state subscriber (detects fault or estop press)
         rospy.Subscriber('/ur_hardware_interface/safety_mode',SafetyMode, self.safety_callback)
@@ -535,7 +540,7 @@ class ur5e_arm():
         if capture_start_as_ref_pos:
             self.set_current_config_as_control_ref_config(interactive = dialoge_enabled)
             self.current_daq_rel_positions_waraped = np.zeros(6)
-        # print('safety_mode',self.safety_mode)
+        print('safety_mode',self.safety_mode,self.enabled,self.shutdown)
         while not self.shutdown and self.safety_mode == 1 and self.enabled: #chutdown is set on ctrl-c.
             #get ref position inplace - avoids repeatedly declaring new array
             # np.add(self.default_pos,self.current_daq_rel_positions,out = ref_pos)
@@ -604,10 +609,10 @@ class ur5e_arm():
 
 
 if __name__ == "__main__":
-    #This script is included for testing purposes
+
     print("starting")
 
-    arm = ur5e_arm(test_control_signal=False, conservative_joint_lims = False)
+    arm = ur5e_arm()
     time.sleep(1)
     arm.stop_arm()
 

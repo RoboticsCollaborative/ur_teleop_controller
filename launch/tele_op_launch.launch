@@ -3,16 +3,17 @@
   <arg name="floor_type" default="floor" doc="selects a preconfigured z-axis keepout zone height from a selected list in the settings yaml. Value must be one of the options configured in settings."/>
   <!-- floor height overrides floor type if defined -->
   <arg name="floor_height" default="none" doc="Optional. Allows user to set an arbitrary z-axis lower keepout zone height. Preconfigured heights can be set with the 'floor_type' argument"/>
+  <arg name="conservative_joint_lims" default="false" doc="Optional. Allows user to restric the joint limmits to a more conservative range defined in the settings file."/>
 
   <!-- parameters set at runtime based on args -->
   <param name="encoder_type" type="str" value="$(arg encoder_type)"/>
   <param name="floor_type" type="str" value="$(arg floor_type)"/>
   <param name="floor_height" type="double" value="$(arg floor_height)" unless="$(eval arg('floor_height') == 'none' )"/>
-
+  <param name="conservative_joint_lims" type="bool" value="$(arg conservative_joint_lims)"/>
   <!-- setings files -->
   <rosparam command="load" file="$(find test_vel_controller)/Settings/tele_op_settings.yaml" />
   <rosparam command="load" file="$(find test_vel_controller)/Settings/gripper_collision_points.yaml" />
 
   <!-- tele op node -->
-  <node name="test_name" pkg="test_vel_controller" type="test_reading_settings.py" output = "screen"/>
+  <node name="test_name" pkg="test_vel_controller" type="arm_controller.py" output = "screen"/>
 </launch>
