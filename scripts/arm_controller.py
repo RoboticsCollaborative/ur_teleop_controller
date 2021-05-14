@@ -33,9 +33,10 @@ class ur5e_arm():
     breaking_stop_time = 0.1 #when stoping safely, executes the stop in 0.1s Do not make large!
 
     #read in settings
+    #TODO add helpful error messages
     encoder_type = rospy.get_param("/encoder_type")
     floor_type = rospy.get_param("/floor_type")
-    floor_height = rospy.get_param("/floor_height") if rospy.has_param('/floor_hight') else None
+    floor_height = rospy.get_param("/floor_height") if rospy.has_param('/floor_height') else None
     encoder_profiles = rospy.get_param("/encoder_profiles")
     joint_lims = rospy.get_param("/joint_lims")
     conservative_joint_lims_enabled = rospy.get_param("/conservative_joint_lims")
