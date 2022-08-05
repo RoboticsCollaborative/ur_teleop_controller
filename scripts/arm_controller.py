@@ -56,7 +56,7 @@ class ur5e_arm():
     '''
     safety_mode = -1
     shutdown = False
-    enabled = False
+    enabled = True
     jogging = False
     joint_reorder = [2,1,0,3,4,5]
     breaking_stop_time = 0.1 #when stoping safely, executes the stop in 0.1s Do not make large!
@@ -71,6 +71,9 @@ class ur5e_arm():
     joint_ff_gains_varaible = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
     # default_pos = (np.pi/180)*np.array([90.0, -90.0, 90.0, -90.0, -45.0, 180.0])
+    # default_pos = (np.pi/180)*np.array([90.0, -90.0, 90.0, -90.0, 270.0, 90.0]) #top down grasp
+    # print(default_pos)
+    # time.sleep(10)
     default_pos = (np.pi/180)*np.array([90.0, -90.0, 90.0, 0.0, 90.0, 90.0])
     robot_ref_pos = deepcopy(default_pos)
     saved_ref_pos = None
@@ -80,6 +83,10 @@ class ur5e_arm():
     # upper_lims = (np.pi/180)*np.array([175.0, 5.0, 175.0, 5.0, 5.0, 265.0])
     # conservative_lower_lims = (np.pi/180)*np.array([45.0, -100.0, 45.0, -135.0, -135.0, 135.0])
     # conservative_upper_lims = (np.pi/180)*np.array([135, -45.0, 140.0, -45.0, -45.0, 225.0])
+
+    lower_lims = (np.pi/180)*np.array([0.0, -120.0, 0.0, -130.0, 180.0, -20.0])
+    upper_lims = (np.pi/180)*np.array([180.0, 5.0, 180.0, 40.0, 360.0, 210.0])
+
     lower_lims = (np.pi/180)*np.array([5.0, -120.0, 5.0, -90.0, 0.0, 0.0])
     upper_lims = (np.pi/180)*np.array([175.0, 5.0, 175.0, 90.0, 180.0, 180.0])
     conservative_lower_lims = (np.pi/180)*np.array([45.0, -100.0, 45.0, -90.0, 0.0, 0.0])
@@ -249,8 +256,9 @@ class ur5e_arm():
         RT = FK[:3,:3]
         filtered_wrench = np.array(self.filter.filter(self.current_wrench))
         np.matmul(RT, filtered_wrench[:3], out = self.current_wrench_global[:3])
-        np.matmul(RT, filtered_wrench[:3], out = self.current_wrench_global[3:])
+        np.matmul(RT, filtered_wrench[3:], out = self.current_wrench_global[3:])
         np.matmul(Ja.transpose(), self.current_wrench_global, out = self.current_joint_torque)
+        # print(self)
         self.first_wrench_callback = False
 
     def daq_callback(self, data):
@@ -525,7 +533,8 @@ class ur5e_arm():
                 self.vel_ref.data = np.array([0.0]*6)
                 time.sleep(0.01)
                 continue
-            
+            print(self.default_pos)
+            print(self.current_joint_positions)
             self.joint_admittance_controller(ref_pos = self.default_pos,
                                              max_speeds = self.homing_joint_speeds,
                                              max_acc = self.homing_joint_acc)
@@ -574,10 +583,12 @@ class ur5e_arm():
         self.init_joint_admittance_controller(capture_start_as_ref_pos, dialoge_enabled)
 
         while not self.shutdown and self.safety_mode == 1 and self.enabled: #shutdown is set on ctrl-c.
-            self.joint_admittance_controller(ref_pos = self.current_daq_rel_positions_waraped + self.robot_ref_pos,
+            self.joint_admittance_controller(ref_pos = self.robot_ref_pos,
                                              max_speeds = self.max_joint_speeds,
                                              max_acc = self.max_joint_acc)
-
+            # self.joint_admittance_controller(ref_pos = self.current_daq_rel_positions_waraped + self.robot_ref_pos,
+            #                                  max_speeds = self.max_joint_speeds,
+            #                                  max_acc = self.max_joint_acc)
             #wait
             rate.sleep()
         self.stop_arm(safe = True)
@@ -677,7 +688,7 @@ if __name__ == "__main__":
     #This script is included for testing purposes
     print("starting")
 
-    arm = ur5e_arm(test_control_signal=False, conservative_joint_lims = False)
+    arm = ur5e_arm(test_control_signal=True, conservative_joint_lims = False)
     time.sleep(1)
     arm.stop_arm()
 
