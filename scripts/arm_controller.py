@@ -241,10 +241,22 @@ class ur5e_arm():
         
         Ja = self.kdl_kin.jacobian(self.current_joint_positions)
         FK = self.kdl_kin.forward(self.current_joint_positions)
-        RT = FK[:3,:3]
+        p = FK[:3,3]
+        R = FK[:3,:3]
+        RT = np.transpose(R)
+
+        Rp0 = np.cross(np.array(RT[:,0]).reshape(-1),np.array(p).reshape(-1))
+        Rp1 = np.cross(np.array(RT[:,1]).reshape(-1),np.array(p).reshape(-1))
+        Rp2 = np.cross(np.array(RT[:,2]).reshape(-1),np.array(p).reshape(-1))
+        Rp = - np.array([Rp0, Rp1, Rp2])
+
         filtered_wrench = np.array(self.filter.filter(self.current_wrench))
-        np.matmul(RT, filtered_wrench[:3], out = self.current_wrench_global[:3])
-        np.matmul(RT, filtered_wrench[:3], out = self.current_wrench_global[3:])
+        np.matmul(R, filtered_wrench[3:], out = self.current_wrench_global[3:])
+
+        ## The second momentum calculation should be the correct one but needs to be tested
+        # np.matmul(R, filtered_wrench[:3], out = self.current_wrench_global[:3])
+        self.current_wrench_global[:3] = np.matmul(R, filtered_wrench[:3]) + np.matmul(Rp, filtered_wrench[3:])
+        
         np.matmul(Ja.transpose(), self.current_wrench_global, out = self.current_joint_torque)
         self.first_wrench_callback = False
 
